@@ -123,7 +123,7 @@ def get_categories_apps():
     categories = scraper.categories()
     log("Total Categories: {}".format(len(categories)))
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
         future_to_category = {
             executor.submit(get_category_apps, category): category for category in categories
         }
@@ -140,7 +140,7 @@ def get_categories_apps():
 
 def get_similar_apps():
     while len(stats['similars-not-checked']):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
             future_to_app_id = {
                 executor.submit(get_and_save_similar, app_id): app_id for app_id in stats['similars-not-checked']
             }
