@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: google-play-scraper
+  labels:
+    app: play-scraper
+spec:
+  selector:
+    matchLabels:
+      app: play-scraper
+  serviceName: no-service-is-needed
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: play-scraper
+    spec:
+      containers:
+      - command:
+        - sh
+        - -c
+        - |
+          apt-get update && \
+          apt-get install -y ucspi-tcp redis-server git redir tmux && \
+          redir :8888 cafebazaar-gunicorn.bazaar-app-accumulation:8000 && \
+          sleep infinity
+        image: docker.repos.balad.ir/ubuntu:20.04
+        imagePullPolicy: IfNotPresent
+        name: ubuntu-debug
+        resources:
+          limits:
+            cpu: "1"
+            ephemeral-storage: 500Mi
+            memory: 2000Mi
+          requests:
+            cpu: 50m
+            ephemeral-storage: 250Mi
+            memory: 1000Mi
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+          - mountPath: /scraper
+            subPath: scraper
+            name: scraper-files
+        
+      dnsPolicy: ClusterFirst
+      imagePullSecrets:
+      - name: regcred
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      
+
+  volumeClaimTemplates:
+    - metadata:
+        name: scraper-files
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 10Gi
+        storageClassName: hicap-new
+        
