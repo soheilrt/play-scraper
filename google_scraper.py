@@ -12,7 +12,7 @@ from play_scraper.scraper import PlayScraper
 
 scraper = PlayScraper()
 play_scraper.settings.CONCURRENT_REQUESTS = 25
-base_addr = ""
+base_addr = "data"
 
 stats_lock = Lock()
 stats = {
