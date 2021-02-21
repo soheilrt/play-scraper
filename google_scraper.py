@@ -3,15 +3,18 @@ import json
 import os
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
+from threading import Lock
 
 import play_scraper
-import play_scraper.utils
 import play_scraper.settings
+import play_scraper.utils
 from play_scraper.scraper import PlayScraper
 
 scraper = PlayScraper()
 play_scraper.settings.CONCURRENT_REQUESTS = 25
-base_addr = "/"
+base_addr = ""
+
+stats_lock = Lock()
 stats = {
     'details-checked': set(),
     'developers-not-checked': set(),
@@ -38,11 +41,17 @@ def set_stat(kind, info):
     if info in stats[kind]:
         return
 
-    addr = os.path.join(base_addr,f'stats/{kind}.txt')
-    with open(addr, 'a+') as f:
-        f.write(info + '\n')
-
+    stats_lock.acquire()
     stats[kind].add(info)
+    addr = os.path.join(base_addr, f'stats/{kind}.txt')
+    with open(addr, 'w') as f:
+        f.write('\n'.join(stats[kind]))
+    stats_lock.release()
+
+
+def remove_stat(kind, info):
+    if info not in stats[kind]:
+        return
 
 
 def set_new_app_stats(app_info):
@@ -77,7 +86,7 @@ def get_and_save_similar(app_id):
     try:
         similars = scraper.similar(app_id)
         new_app_ids = [i['app_id'] for i in similars if i['app_id'] not in stats['details-checked']]
-        log("New Apps: {}({})".format(len(new_app_ids), len(similars)))
+        log("New Apps for {}: {}({})".format(app_id, len(new_app_ids), len(similars)))
         get_and_save_app_details(app_ids=new_app_ids)
     except Exception as e:
         log("Error: {}".format(str(e)))
@@ -90,37 +99,62 @@ def get_and_save_developer_apps(developer_id):
         save_app_details(detail)
 
 
+def get_category_apps(category):
+    if category in stats['categories-checked']:
+        return
+
+    log(f"Category: {category}")
+    category_items = [i['app_id'] for i in scraper.category_items(category)]
+    get_and_save_app_details(category_items)
+
+    category_clusters = scraper.category_clusters(category)
+    log("Category Clusters: {} - {}".format(category, len(category_clusters)))
+    for key in category_clusters:
+        log("Cluster: {} - {}".format(category, key))
+        cluster_items = [i['app_id'] for i in scraper.cluster_items(category_clusters[key])]
+        get_and_save_app_details(cluster_items)
+
+    set_stat('categories-checked', category)
+    log_stats()
+
+
 def get_categories_apps():
     log("Getting Categories Apps ....")
     categories = scraper.categories()
     log("Total Categories: {}".format(len(categories)))
-    for i, category in enumerate(categories):
-        if category in stats['categories-checked']:
-            continue
 
-        log(f"{i} - Category: {category}")
-        category_items = [i['app_id'] for i in scraper.category_items(category)]
-        get_and_save_app_details(category_items)
-
-        category_clusters = scraper.category_clusters(category)
-        log("Category Clusters: {} - {}".format(category, len(category_clusters)))
-        for key in category_clusters:
-            log("Cluster: {} - {}".format(category, key))
-            cluster_items = [i['app_id'] for i in scraper.cluster_items(category_clusters[key])]
-            get_and_save_app_details(cluster_items)
-
-        set_stat('categories-checked', category)
-        log_stats()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+        future_to_category = {
+            executor.submit(get_category_apps, category): category for category in categories
+        }
+        for future in concurrent.futures.as_completed(future_to_category):
+            category = future_to_category[future]
+            try:
+                set_stat('categories-checked', category)
+            except Exception as exc:
+                log('%r generated an exception: %s' % (category, exc))
+            else:
+                log("Done: Category: {}".format(category))
+                log_stats()
 
 
 def get_similar_apps():
     while len(stats['similars-not-checked']):
-        app_id = stats['similars-not-checked'].pop()
-        if app_id != '':
-            log("Similar Apps For: {}".format(app_id))
-            get_and_save_similar(app_id)
-            set_stat('similars-checked', app_id)
-            log_stats()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+            future_to_app_id = {
+                executor.submit(get_and_save_similar, app_id): app_id for app_id in stats['similars-not-checked']
+            }
+            for future in concurrent.futures.as_completed(future_to_app_id):
+                app_id = future_to_app_id[future]
+                try:
+                    set_stat('similars-checked', app_id)
+
+                    stats['similars-not-checked'].remove(app_id)
+                except Exception as exc:
+                    log('%r generated an exception: %s' % (app_id, exc))
+                else:
+                    log("Done: Similar Apps For: {}".format(app_id))
+                    log_stats()
 
 
 def get_developers_apps():
