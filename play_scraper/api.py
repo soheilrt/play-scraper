@@ -99,3 +99,13 @@ def categories(hl="en", gl="us", ignore_promotions=True):
     """
     s = scraper.PlayScraper(hl, gl)
     return s.categories(ignore_promotions)
+
+
+def category_clusters(category):
+    s = scraper.PlayScraper()
+    return s.category_clusters(category)
+
+
+def cluster_items(gsr, detailed=False):
+    s = scraper.PlayScraper()
+    return s.cluster_items(gsr, detailed)

@@ -65,7 +65,7 @@ def build_url(method, id_string):
     url = "{base}/{method}?id={id}".format(base=s.BASE_URL, method=method, id=id_string)
     return url
 
-
+# deprecated
 def build_collection_url(category="", collection=""):
     """Creates the absolute url based on the category and collection ids.
 
@@ -85,15 +85,26 @@ def build_collection_url(category="", collection=""):
     return url
 
 
+def build_category_url(category):
+    url = f"{s.BASE_URL}/category/{category}"
+    return url
+
+def build_cluster_url(gsr):
+    cluster = "/collection/cluster?gsr={gsr}".format(gsr=gsr)
+    url = "{base}{cluster}".format(base=s.BASE_URL, cluster=cluster)
+
+    return url
+
+
 def send_request(
-    method,
-    url,
-    data=None,
-    params=None,
-    headers=None,
-    timeout=30,
-    verify=True,
-    allow_redirects=False,
+        method,
+        url,
+        data=None,
+        params=None,
+        headers=None,
+        timeout=30,
+        verify=True,
+        allow_redirects=False,
 ):
     """Sends a request to the url and returns the response.
 
@@ -267,7 +278,7 @@ def parse_app_details(soup):
     description_soup = soup.select_one('div[itemprop="description"] span div')
     if description_soup:
         description = "\n".join(description_soup.stripped_strings)
-        description_html = description_soup.encode_contents()
+        description_html = description_soup.encode_contents().decode('utf-8')
     else:
         description = description_html = None
 
@@ -545,3 +556,7 @@ def multi_futures_app_request(
             )
 
     return apps
+
+
+def get_query_params(url):
+    return parse_qs(urlparse(url).query)

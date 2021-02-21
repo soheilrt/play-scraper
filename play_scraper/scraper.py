@@ -6,7 +6,7 @@ try:
     from urllib import quote_plus
     from urlparse import urljoin
 except ImportError:
-    from urllib.parse import urljoin, quote_plus
+    from urllib.parse import urljoin, quote_plus, urlparse, parse_qs
 try:
     basestring
 except NameError:
@@ -17,9 +17,7 @@ from bs4 import BeautifulSoup
 
 from play_scraper import settings as s
 from play_scraper.constants import HL_LANGUAGE_CODES, GL_COUNTRY_CODES
-from play_scraper.lists import AGE_RANGE, CATEGORIES, COLLECTIONS
 from play_scraper.utils import (
-    build_collection_url,
     build_url,
     extract_id_query,
     generate_post_data,
@@ -27,7 +25,7 @@ from play_scraper.utils import (
     parse_app_details,
     parse_card_info,
     parse_cluster_card_info,
-    send_request,
+    send_request, build_cluster_url, build_category_url, get_query_params,
 )
 
 
@@ -52,6 +50,8 @@ class PlayScraper(object):
         self._search_url = s.SEARCH_URL
         self._pagtok = s.PAGE_TOKENS
         self._log = logging.getLogger(__name__)
+        self.list_item_promo_selector = "div.vU6FJ.HPtqMb > div > div.b8cIId.ReQCgd.KdSQre.fmVS2c > a"
+        self.list_item_selector = "div.ZmHEEd > div > c-wiz > div > div > div.uzcko > div > div > a"
 
     def _parse_multiple_apps(self, list_response):
         """Extracts app ids from a list's Response object, sends GET requests to
@@ -94,66 +94,6 @@ class PlayScraper(object):
         app_json = parse_app_details(soup)
         app_json.update({"app_id": app_id, "url": url})
         return app_json
-
-    def collection(
-        self,
-        collection_id,
-        category_id=None,
-        results=None,
-        page=None,
-        age=None,
-        detailed=False,
-    ):
-        """Sends a POST request and fetches a list of applications belonging to
-        the collection and an optional category.
-
-        :param collection_id: the collection id, e.g. 'NEW_FREE'.
-        :param category_id: (optional) the category id, e.g. 'GAME_ACTION'.
-        :param results: the number of apps to retrieve at a time.
-        :param page: page number to retrieve; limitation: page * results <= 500.
-        :param age: an age range to filter by (only for FAMILY categories)
-        :param detailed: if True, sends request per app for its full detail
-        :return: a list of app dictionaries
-        """
-        if collection_id not in COLLECTIONS and not collection_id.startswith(
-            "promotion"
-        ):
-            raise ValueError(
-                "Invalid collection_id '{collection}'.".format(collection=collection_id)
-            )
-        collection_name = COLLECTIONS.get(collection_id) or collection_id
-
-        category = "" if category_id is None else CATEGORIES.get(category_id)
-        if category is None:
-            raise ValueError(
-                "Invalid category_id '{category}'.".format(category=category_id)
-            )
-
-        results = s.NUM_RESULTS if results is None else results
-        if results > 120:
-            raise ValueError("Number of results cannot be more than 120.")
-
-        page = 0 if page is None else page
-        if page * results > 500:
-            raise ValueError("Start (page * results) cannot be greater than 500.")
-
-        if category.startswith("FAMILY") and age is not None:
-            self.params["age"] = AGE_RANGE[age]
-
-        url = build_collection_url(category, collection_name)
-        data = generate_post_data(results, page)
-        response = send_request("POST", url, data, self.params)
-
-        if detailed:
-            apps = self._parse_multiple_apps(response)
-        else:
-            soup = BeautifulSoup(response.content, "lxml", from_encoding="utf8")
-            apps = [
-                parse_card_info(app_card)
-                for app_card in soup.select('div[data-uitype="500"]')
-            ]
-
-        return apps
 
     def developer(self, developer, results=None, page=None, detailed=False):
         """Sends a POST request and retrieves a list of the developer's
@@ -293,3 +233,76 @@ class PlayScraper(object):
                 }
 
         return categories
+
+    def category_clusters(self, category):
+        """
+
+        :param category:
+        :return:
+        """
+
+        clusters = {}
+        cluster_selector = "c-wiz > c-wiz > div > div.Z3lOXb > div.xwY9Zc > a"
+
+        category_url = build_category_url(category=category)
+        response = send_request("GET", category_url)
+
+        soup = BeautifulSoup(response.content, 'lxml', from_encoding='utf8')
+        cluster_elements = soup.select(cluster_selector)
+
+        for element in cluster_elements:
+            title = element.h2.text
+            gsr = get_query_params(element['href'])['gsr'][0]
+
+            clusters[title] = gsr
+
+        return clusters
+
+    def cluster_items(self, gsr, detailed=False):
+        """
+        Get cluster page items
+        https://play.google.com/store/apps/collection/cluster?clp=0g4cChoKFHRvcHNlbGxpbmdfZnJlZV9HQU1FEAcYAw%3D%3D:S:ANO1ljJ_Y5U&gsr=Ch_SDhwKGgoUdG9wc2VsbGluZ19mcmVlX0dBTUUQBxgD:S:ANO1ljL4b8c
+        :param gsr: cluster id
+        :return: list of app details
+        """
+        cluster_url = build_cluster_url(gsr=gsr)
+        response = send_request("GET", cluster_url)
+
+        soup = BeautifulSoup(response.content, 'lxml', from_encoding='utf8')
+        items_elements = soup.select(self.list_item_selector)
+
+        if not len(items_elements):
+            items_elements = soup.select(self.list_item_promo_selector)
+
+        app_ids = [get_query_params(element['href'])['id'][0] for element in items_elements]
+
+        if not detailed:
+            return [{'app_id': app_id} for app_id in app_ids]
+
+        return multi_futures_app_request(app_ids=app_ids)
+
+    def category_items(self, category, detailed=False):
+        """
+        list of apps in category main page
+        :param detailed:
+        :param category:
+        :return:
+        """
+        category_url = build_category_url(category)
+        response = send_request("GET", category_url)
+
+        soup = BeautifulSoup(response.content, 'lxml', from_encoding='utf8')
+        items_elements = soup.select(self.list_item_selector)
+
+        if not len(items_elements):
+            items_elements = soup.select(self.list_item_promo_selector)
+
+        app_ids = [get_query_params(element['href'])['id'][0] for element in items_elements]
+
+        if not detailed:
+            return [{'app_id': app_id} for app_id in app_ids]
+
+        return multi_futures_app_request(app_ids=app_ids)
+
+    def category_tabs(self, category):
+        pass  # todo implement me!
