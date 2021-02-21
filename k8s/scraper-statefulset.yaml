@@ -21,12 +21,8 @@ spec:
       - command:
         - sh
         - -c
-        - |
-          apt-get update && \
-          apt-get install -y ucspi-tcp redis-server git redir tmux && \
-          redir :8888 cafebazaar-gunicorn.bazaar-app-accumulation:8000 && \
-          sleep infinity
-        image: docker.repos.balad.ir/ubuntu:20.04
+        - sleep infinity
+        image: registry.cafebazaar.ir:5000/soheil.rahmat/play-scraper:latest
         imagePullPolicy: IfNotPresent
         name: ubuntu-debug
         resources:
@@ -41,13 +37,11 @@ spec:
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
         volumeMounts:
-          - mountPath: /scraper
-            subPath: scraper
+          - mountPath: /scraper/data
+            subPath: scraper/data
             name: scraper-files
         
       dnsPolicy: ClusterFirst
-      imagePullSecrets:
-      - name: regcred
       restartPolicy: Always
       schedulerName: default-scheduler
       terminationGracePeriodSeconds: 30
