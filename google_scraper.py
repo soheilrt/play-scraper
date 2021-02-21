@@ -11,7 +11,7 @@ import play_scraper.utils
 from play_scraper.scraper import PlayScraper
 
 scraper = PlayScraper()
-play_scraper.settings.CONCURRENT_REQUESTS = 25
+play_scraper.settings.CONCURRENT_REQUESTS = 15
 base_addr = "data"
 
 stats_lock = Lock()
@@ -105,6 +105,7 @@ def get_category_apps(category):
 
     log(f"Category: {category}")
     category_items = [i['app_id'] for i in scraper.category_items(category)]
+    log(f'Category items: {category} - {len(category_items)}')
     get_and_save_app_details(category_items)
 
     category_clusters = scraper.category_clusters(category)
@@ -112,6 +113,7 @@ def get_category_apps(category):
     for key in category_clusters:
         log("Cluster: {} - {}".format(category, key))
         cluster_items = [i['app_id'] for i in scraper.cluster_items(category_clusters[key])]
+        log(f"Cluster Items: {category} - {key} - {len(cluster_items)}")
         get_and_save_app_details(cluster_items)
 
     set_stat('categories-checked', category)
@@ -123,7 +125,7 @@ def get_categories_apps():
     categories = scraper.categories()
     log("Total Categories: {}".format(len(categories)))
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
         future_to_category = {
             executor.submit(get_category_apps, category): category for category in categories
         }
@@ -140,7 +142,7 @@ def get_categories_apps():
 
 def get_similar_apps():
     while len(stats['similars-not-checked']):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=25) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
             future_to_app_id = {
                 executor.submit(get_and_save_similar, app_id): app_id for app_id in stats['similars-not-checked']
             }
