@@ -22,16 +22,16 @@ spec:
         - sh
         - -c
         - sleep infinity
-        image: registry.cafebazaar.ir:5000/soheil.rahmat/play-scraper:latest
+        image: registry.cafebazaar.ir:5000/bazaar/app-delivery/ayyar/google-play-crawler:!TAG!
         imagePullPolicy: IfNotPresent
         name: ubuntu-debug
         resources:
           limits:
-            cpu: "1"
+            cpu: "2"
             ephemeral-storage: 500Mi
             memory: 2000Mi
           requests:
-            cpu: 50m
+            cpu: 300m
             ephemeral-storage: 250Mi
             memory: 1000Mi
         terminationMessagePath: /dev/termination-log
