@@ -88,8 +88,6 @@ def get_and_save_similar(app_id):
         new_app_ids = [i['app_id'] for i in similars if i['app_id'] not in stats['details-checked']]
         log("New Apps for {}: {}({})".format(app_id, len(new_app_ids), len(similars)))
         get_and_save_app_details(app_ids=new_app_ids)
-        log("Done: Similar Apps For: {}".format(app_id))
-        log_stats()
     except Exception as e:
         log("Error: {}".format(str(e)))
 
@@ -152,8 +150,10 @@ def get_similar_apps():
                 app_id = future_to_app_id[future]
                 try:
                     set_stat('similars-checked', app_id)
-
                     stats['similars-not-checked'].remove(app_id)
+
+                    log("Done: Similar Apps For: {}".format(app_id))
+                    log_stats()
                 except Exception as exc:
                     log('%r generated an exception: %s' % (app_id, exc))
 
