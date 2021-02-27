@@ -11,7 +11,7 @@ import play_scraper.utils
 from play_scraper.scraper import PlayScraper
 
 scraper = PlayScraper()
-play_scraper.settings.CONCURRENT_REQUESTS = 15
+play_scraper.settings.CONCURRENT_REQUESTS = 20
 base_addr = "data"
 
 stats_lock = Lock()
@@ -88,6 +88,8 @@ def get_and_save_similar(app_id):
         new_app_ids = [i['app_id'] for i in similars if i['app_id'] not in stats['details-checked']]
         log("New Apps for {}: {}({})".format(app_id, len(new_app_ids), len(similars)))
         get_and_save_app_details(app_ids=new_app_ids)
+        log("Done: Similar Apps For: {}".format(app_id))
+        log_stats()
     except Exception as e:
         log("Error: {}".format(str(e)))
 
@@ -125,7 +127,7 @@ def get_categories_apps():
     categories = scraper.categories()
     log("Total Categories: {}".format(len(categories)))
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=play_scraper.settings.CONCURRENT_REQUESTS) as executor:
         future_to_category = {
             executor.submit(get_category_apps, category): category for category in categories
         }
@@ -142,7 +144,7 @@ def get_categories_apps():
 
 def get_similar_apps():
     while len(stats['similars-not-checked']):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=play_scraper.settings.CONCURRENT_REQUESTS) as executor:
             future_to_app_id = {
                 executor.submit(get_and_save_similar, app_id): app_id for app_id in stats['similars-not-checked']
             }
@@ -154,9 +156,6 @@ def get_similar_apps():
                     stats['similars-not-checked'].remove(app_id)
                 except Exception as exc:
                     log('%r generated an exception: %s' % (app_id, exc))
-                else:
-                    log("Done: Similar Apps For: {}".format(app_id))
-                    log_stats()
 
 
 def get_developers_apps():
